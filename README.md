@@ -1,0 +1,2 @@
+# Raspberry Pi Luxmeter
+A simple school embedded processor project dedicated to implementing a Luxmeter with GUI alongside proper documentation. Possibly to be used for teaching High School students later on.
