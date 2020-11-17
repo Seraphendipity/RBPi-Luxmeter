@@ -41,3 +41,7 @@ Note: one can perfectly fine just code on the RBPi itself, in which case this Gi
   * Note: I ran into a 801 Error Page; it still logged me in, though. If such a thing happens, go to GitHub in your browser on the Pi, log-in, copy the link of the repo, and you should be able to paste that link when you click 'Clone Repository'.
 
 TODO: Section on creating a version control from scratch, or without GitHub.
+
+* If sharing notebooks, must trust notebooks created on the other computer
+  * I used Trust all notebooks in the settings, but this is potentially dangerous -- use with caution if you download other notebooks.
+  * May need to look into running a jupyter server.
