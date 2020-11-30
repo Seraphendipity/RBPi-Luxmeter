@@ -18,6 +18,7 @@ Q:
 * Microcontroller - program once? Arduino is microcontroller?
 * Overheating?
 
+
 ---
 
 2020.11.16
@@ -45,3 +46,22 @@ TODO: Section on creating a version control from scratch, or without GitHub.
 * If sharing notebooks, must trust notebooks created on the other computer
   * I used Trust all notebooks in the settings, but this is potentially dangerous -- use with caution if you download other notebooks.
   * May need to look into running a jupyter server.
+
+---
+
+2020.11.18
+
+Q:
+
+Hey Abi, I got some questions for you
+In order to do so, have this song for you,
+So let's go ahead and start with *numero Uno*
+
+* Demos with C++? Or do we need to use C?
+* Plagiarism -- using tutorials online
+* Integrating the two systems
+* TI GUI Creator -- why are we using RBPi? Similarly, there are ways to use only digital
+* TI Sensor: Gather analog data -- then what? Analog to Digitial, then pass it to RBPi?
+* Do we connect via I2C?
+  * Yes
+* Eagle: do we only create our small circuit,  or should we include a model of the TI board and Arduino to show how they connect?
