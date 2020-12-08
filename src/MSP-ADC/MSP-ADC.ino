@@ -36,7 +36,7 @@ void setup() {
 
   // I2C: Use Energia's Wire Library Derivative
   // https://energia.nu/guide/libraries/wire/
-  Wire.begin(0x00);
+  Wire.begin(0x10);
   Wire.onRequest(DataRequestHandler);
 }
 
@@ -49,7 +49,7 @@ void loop() {
   // read the input on analog pin A3:
   int sensorValue = analogRead(A15);
   // print out the value you read:
-  Serial.println(sensorValue);
+  //Serial.println(sensorValue);
   delay(1); // delay in between reads for stability
 
 
@@ -67,8 +67,11 @@ void loop() {
 }
 
 void DataRequestHandler() {
+  Wire.write(val);
   val++;                        // increment value
   if (val == 64) {             // if reached 64th position (max)
     val = 0;    // start over from lowest value
   }
+  
+  Serial.print(val);
 }

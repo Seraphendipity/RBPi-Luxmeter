@@ -131,7 +131,18 @@ The three example cases of this
 
 ## Configuration of RBPi
 
-The Raspberry Pi disables I2C by default, similar to SSH. Here are the steps to enable the RBPi to use its I2C ports; note that this must only be done once. [^SetupAutomation]
+The Raspberry Pi disables I2C by default, similar to SSH. Here are the steps to enable the RBPi to use its I2C ports; note that this must only be done once. [^SetupAutomation] [@I2C-RBPi-Steps]
+
+**Note**: this RBPi did not have anything in its blacklist config file and was setup for I2C protocol communication. The steps to add it are included here for completeness to prevent a 3-hour internet binge search in the case your files are *not* set-up in the OS. 
+
+1. **Remove the Blacklist**: by default, Raspberry Pis typically blacklist SPI and I2C protocol.
+   1. Run the command `sudo nano /etc/modprobe.d/raspi-blacklist.conf`.
+   2. Input a `#` character before the line `blacklist i2c-bcm2708`, commenting it out.
+2. **Add I2C Modules to Kernel**: the packages that defines to the computer the I2C protocols.
+   1. Run the command `sudo nano /etc/modules`.
+   2. Input `i2c-dev` at the bottom.
+3. **Install Software Packages**: Finally, the packages that allow I2C communication. Python requires the [smbus]() to utilize the I2C communication.
+   1. sudo apt-get install i2c-tools
 
 [^SetupAutomation]: **Setup Automation**: I'm curious if this can be set-up in a batch file or similar such that others can run it without worrying about the details. Perhaps the details are useful, though. 
 
@@ -144,11 +155,13 @@ graph TB;
 	subgraph MSP432 Board - Slave
 	ADC(Analog Measuring) -.-> I2Cs(Slave I2C Receive Handler)
 	end
-	I2Cs --> I2Cm
+	I2Cs <--> I2Cm
 	subgraph Raspberry Pi - Master
 	I2Cm(Master I2C Requester) -.-> GUI(GUI)
 	end
 ```
+
+TODO: show graphically the communication steps
 
 The Analog Measuring and GUI will be focused on elsewhere -- they are designed to be not specific to I2C such that another communication protocol could be put in place.
 
