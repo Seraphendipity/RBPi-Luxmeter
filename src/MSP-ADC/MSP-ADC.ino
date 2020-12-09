@@ -20,12 +20,11 @@
 // Include external libraries for extended functionality.
 #include <Wire.h>
 
-
 // DEFINITIONS
 // Define constants to be used throughout program as global variables.
 #define LED RED_LED
-int val = 0;
-
+int sensorValue = 0;
+int i = 0;
 void setup() {
   // Setup runs once at the start or resetting of the microcontroller.
   
@@ -36,7 +35,7 @@ void setup() {
 
   // I2C: Use Energia's Wire Library Derivative
   // https://energia.nu/guide/libraries/wire/
-  Wire.begin(0x00);
+  Wire.begin(0x10);
   Wire.onRequest(DataRequestHandler);
 }
 
@@ -47,10 +46,10 @@ void loop() {
  // digitalWrite(LED, LOW);    // turn the LED off by making the voltage LOW
  // delay(2000);               // wait for a second
   // read the input on analog pin A3:
-  int sensorValue = analogRead(A15);
+  sensorValue = analogRead(A15);
   // print out the value you read:
-  Serial.println(sensorValue);
-  delay(1); // delay in between reads for stability
+  //Serial.println(sensorValue);
+  delay(100); // delay in between reads for stability
 
 
   // I2C
@@ -67,8 +66,10 @@ void loop() {
 }
 
 void DataRequestHandler() {
-  val++;                        // increment value
-  if (val == 64) {             // if reached 64th position (max)
-    val = 0;    // start over from lowest value
-  }
+  Wire.write(sensorValue);
+  Serial.print(i++);
+  Serial.print(": ");
+  Serial.print(sensorValue);
+  Serial.print(" | ");
+  Serial.println(sensorValue, BIN);
 }
