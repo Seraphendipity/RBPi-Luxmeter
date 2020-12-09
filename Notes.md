@@ -1,6 +1,6 @@
----
-bibliography: [references.bib]
----
+-------------  ----------------
+bibliography:  [references.bib]
+-------------  ----------------
 
 # Notes
 
@@ -226,3 +226,221 @@ Numerous resources were used to generate the code. Here are some of the more use
 ### Other Resources
 
 https://en.wikipedia.org/wiki/System_Management_Bus
+
+## Misc.
+
+Here are some general notes on my experience in implementing I2C. These are not exactly thrilling to read through, but sometimes noting what little hiccups one has ran into can be the difference between a 15-minute and 7-hour bug fix in the future.
+
+* Baud rate does not matter, it seems: https://www.i2c-bus.org/speed/ . The SCL line takes care of this.
+
+### Addresses
+
+Initially set slave address to 0x00 -- these are taken, however, and implicitly reserved. To be honest, I am still not entirely sure what this mapping is, however here is what I can intuit:
+
+Firstly, use `i2cdetect -y 1` as your general "check" if the slave connection is present. Note in older models of RBPi, may need to use `0` instead of `1` -- it represents the bus number.
+
+If successful, the output should appear as such:
+
+```text
+pi@raspberrypi:~ $ i2cdetect -y 1
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- -- 
+10: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+70: -- -- -- -- -- -- -- --  
+```
+
+The above diagram shows *no* connections detected. On the MSP board, then specidy in the `setup()` loop
+
+```cpp
+void setup() {
+  Wire.begin(0x10);
+}
+```
+
+Compile and run, which should show:
+
+```text
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- -- 
+10: 10 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+70: -- -- -- -- -- -- -- --                         
+```
+
+Note the `10`. To test this further, try...
+
+```cpp
+Wire.begin(0x15);
+```
+
+```text
+pi@raspberrypi:~ $ i2cdetect -y 1
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00:          -- -- -- -- -- -- -- -- -- -- -- -- -- 
+10: -- -- -- -- -- 15 -- -- -- -- -- -- -- -- -- -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+30: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+40: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+70: -- -- -- -- -- -- -- --                         
+```
+
+If no numbers are shown, that indicate an error in the I2C communication (alternatively, the board is not responding/updating, as such may want to test if the LED can blink or such). There are innumerable problems that can go wrong with I2C, as <i2c-bus.org> explains.[@I2C-CommProb] [@I2C-ObscProb]
+
+### Python Kernel Problems
+
+RBPi's, as of this writing, seem to default with Python 2.7, typically just aliased "Python". Meanwhile, if you have Python 3 (aliased "Python3") installed, Jupyter may default to that. This can prove problematic, as seen with my VSCode editor. For some still unresolved reason, while the `ipykernel` was installed for Python 2.7, VSCode did not recognize and it and requested its installation if the notebook was switched to 2.7. Meanwhile, my modules were installed under 2.7 (as I used `python -m pip install smbus2`, where `python` means Python 2.7), and for another yet discovered reason, the jupyter kernel refused to acknowledge those modules as they were under 2.7.
+
+As such, the fix was to uninstall relevant packages, switch the alias of the terminal `python` to `python3` via `alias python-"python3"`, then re-install the packages, which installs them under Python 3.
+
+This bug may have had to do with the fact that Python 2.7 was 32-bit, but so far I've found no completely identical bugs despite hours of looking into the problem, hence the best workaround is simply to re-alias your terminal, create a bash-config to re-alias python system-wide, or figure out a manner to change the jupyter notebook.
+
+### The Great I2C Stopping Bug
+
+After finally setting I2C up, it was to great dismay that the program appeared to time-out after less than a minute. The MSP board would stop entirely, not even running other tasks nor outputting an error, while the Python program would throw a `[Errno 121] Remote I/O Error`, typically associated with no connection.
+
+Unsure of whether the MSP board was stopping or the Python, the first task was to determine if the MSP board could operate for several minutes without the I2C protocol. Commenting out the I2C `Wire.write(sensorValue);` showed that the board could run several minutes and implicitly indefinitely without any timeout.
+
+The next assumption was a Baud rate or communication difference that eventually caused a desync, however this is quite silly it seems, as there is an entire SCL line that syncs the boards and as such a desync on these grounds is unlikely:
+
+> On synchronous transmissions like the I2C bus the situation is much more relaxed. The clock is transmitted by the sender and the receiver is always able to synchronize with that clock. I2C defines several speed grades but the term baud rate is quite unusual in this context. [@I2C-ClockSpeed]
+
+Another hypothesis was that the MSP board could not "keep up". This seemed unlikely from the git go for two major reasons:
+
+* **Interrupts**: implicitly, the I2C `OnRequest()` handler on the MSP board is handled as an interrupt. The rapid gathering of data far outstripped the number of I2C requests, hence it did not seem to be pushing the processor or requesting multiple times within the timeframe of the board's request handling. If it did, i.e. the `OnRequest()` was process-intensive, it would likely see a delay in the processing of the ADC loop.
+* **Stacking**: completely unsure, but from a cursory glance, the smbus2 library *seems* to stack requests: it does not throw requests at the MSP board.
+* **Typical Transfer Rates**: while I2C is indeed quite slower than other communication methods [@I2CvSPI], it is still on the order of `100kbit/s` minimum [@I2C-ClockSpeed], which the measly 8 requests per second came nowhere close to approaching.
+
+However, just to ensure this was not the issue, the Python delay speed was vastly increased from `time.sleep(.1)` to `time.sleep(.5)`. And this seemed to fix the issue... until eventually another seeming time-out occurred. As such, attempted `time.sleep(1)`. Eventually another timeout occured. The timing of these timeouts were increasing however, and seemingly linearly. At this time, it was noted that the amount of requests were the same, regardless of timing. To test this, an iterator was placed in front of the requests:
+
+![Debug 2](images/Debug-02.png)
+
+Sure enough, regardless of speed, 250 results were produced each time: the issue was not a time-out, but and end-stop.
+
+A lucky guess at the culprit: `bus.read_byte_data(sAddress, 0)`. [^LuckyGuess] For some odd reason, I initially misunderstood this function as `bus.read_byte_data(SLAVE ADDRESS, BITS TO OFFSET)`, perhaps confusing it with some other code. Exploring the `smbus2` module documentation, however, shows the second argument to refer to the registry address: [@smbus2-doc]
+
+> `read_byte_data(i2c_addr, register, force=None)`
+> Read a single byte from a designated register.
+>
+> - **Parameters:**
+>   - **i2c_addr** (*int*)  – i2c address
+>   - **register** (*int*)  – Register to read
+>   - **force** (*Boolean*) –
+> - **Returns:**	Read byte value
+> - **Return type:**	int
+
+As such, most likely the limit of that register was being reached, hence the proper function to use is `read_byte`, which indeed solved the issue and allowed uninterrupted data flow.
+
+[^LuckyGuess]: Well, "lucky guess" is a relative term. It was the main implementing function, the only thing that actually communicated via the I2C, and every bug pointed at it:
+
+	![Debug 03](images/Debug-03.png)
+
+	Any bug would inevitably likely involve it in some respect.
+
+
+### Correlated, but Inequal Values
+
+I was able to get correlated values, but they were notably different values that simply showed the same relation. 
+
+![Debug](IMAGES/debug-01.png)
+
+Hypothesis 1: the bit values are shifted. To test the hypothesis, compare the binary of co-related values. To this end, the RBPi script was modified to include:
+
+```python
+print(str(i) + ": " + str(sensorValue) + " | " + str(bin(sensorValue)))
+```
+
+While the Energia sketch utilized Serial Monitor's overload. [@SerialPrint-Energia] [^BinaryConversion]
+
+```cpp
+Serial.print(i++);
+Serial.print(": ");
+Serial.print(sensorValue);
+Serial.print(" | ");
+Serial.println(sensorValue, BIN);
+```
+
+[^BinaryConversion]: **Binary Conversion in Energia**: Before aware of the overload, a troublesome amount of time was spent exploring [various](https://stackoverflow.com/questions/7349689/how-to-print-using-cout-a-number-in-binary-form) [means](https://www.arduino.cc/reference/en/language/functions/bits-and-bytes/bitread/) to [convert](https://katyscode.wordpress.com/2012/05/12/printing-numbers-in-binary-format-in-c/) [integers to binary](https://en.cppreference.com/w/cpp/io/cout), with many articles that complicated the issue. This goes to show the use of "working notes", in my opinion, as the largest time sinks of projects are typically not the main implementation components, but rather all the tiny hiccups along the way, which *perfectly* describes my progress on this project.
+
+  As a secondary note, Arduino was actually the fixer here. [@SerialPrint-Arduino] Energia is heavily based on Arduino (that's the goal, afterall), and Arduino has generally more resources avaliable. As such, it is not a bad idea to use Arduino as the go-to source or when Energia's documentation is too sparse, and then if it does not work look into implementation differences between Energia and Arduino if present.
+
+![Debug 2](images/Debug-02.png)
+
+| Iteration | MSP Serial Monitor Value | MSP Serial Monitor Binary | RBPi Read Value | RBPi Read Binary |
+| --------- | ------------------------ | ------------------------- | --------------- | ---------------- |
+| 0         | 940                      | `1110101100`              | 172             | `0010101100`     |
+| 1         | 936                      | `1110101000`              | 168             | `0010101000`     |
+| 2         | 936                      | `1110101000`              | 168             | `0010101000`     |
+| 3         | 933                      | `1110100101`              | 165             | `0010100101`     |
+| 4         | 933                      | `1110100101`              | 165             | `0010100101`     |
+| 5         | 935                      | `1110100111`              | 167             | `0010100111`     |
+| 6         | 937                      | `1110101001`              | 169             | `0010101001`     |
+| 7         | 939                      | `1110101011`              | 171             | `0010101011`     |
+| 8         | 938                      | `1110101010`              | 170             | `0010101010`     |
+| 9         | 936                      | `1110101000`              | 168             | `0010101000`     |
+| 10        | 934                      | `1110100110`              | 166             | `0010100110`     |
+| 11        | 933                      | `1110100101`              | 165             | `0010100101`     |
+| 12        | 935                      | `1110100111`              | 167             | `0010100111`     |
+| 13        | 939                      | `1110101011`              | 171             | `0010101011`     |
+| 14        | 755                      | `1011110011`              | 243             | `0011110011`     |
+| 15        | 659                      | `1010010011`              | 147             | `0010010011`     |
+| 16        | 630                      | `1001110110`              | 118             | `0001110110`     |
+| 17        | 583                      | `1001000111`              | 71              | `0001000111`     |
+| 18        | 572                      | `1000111100`              | 60              | `0000111100`     |
+| 19        | 550                      | `1000100110`              | 38              | `0000100110`     |
+| 20        | 517                      | `1000000101`              | 5               | `0000000101`     |
+| 21        | 499                      | `0111110011`              | 243             | `0011110011`     |
+| 22        | 508                      | `0111111100`              | 252             | `0011111100`     |
+| 23        | 484                      | `0111100100`              | 228             | `0011100100`     |
+| 24        | 445                      | `0110111101`              | 189             | `0010111101`     |
+| 25        | 428                      | `0110101100`              | 172             | `0010101100`     |
+| 26        | 419                      | `0110100011`              | 163             | `0010100011`     |
+| 27        | 414                      | `0110011110`              | 158             | `0010011110`     |
+| 28        | 431                      | `0110101111`              | 175             | `0010101111`     |
+| 29        | 567                      | `1000110111`              | 55              | `0000110111`     |
+| 30        | 793                      | `1100011001`              | 25              | `0000011001`     |
+| 31        | 932                      | `1110100100`              | 164             | `0010100100`     |
+| 32        | 928                      | `1110100000`              | 160             | `0010100000`     |
+| 33        | 934                      | `1110100110`              | 166             | `0010100110`     |
+| 34        | 935                      | `1110100111`              | 167             | `0010100111`     |
+| 35        | 938                      | `1110101010`              | 170             | `0010101010`     |
+| 36        | 937                      | `1110101001`              | 169             | `0010101001`     |
+| 37        | 935                      | `1110100111`              | 167             | `0010100111`     |
+| 38        | 932                      | `1110100100`              | 164             | `0010100100`     |
+| 39        | 933                      | `1110100101`              | 165             | `0010100101`     |
+| 40        | 935                      | `1110100111`              | 167             | `0010100111`     |
+| 41        | 940                      | `1110101100`              | 172             | `0010101100`     |
+| 42        | 938                      | `1110101010`              | 170             | `0010101010`     |
+| 43        | 947                      | `1110110011`              | 179             | `0010110011`     |
+| 44        | 968                      | `1111001000`              | 200             | `0011001000`     |
+| 45        | 987                      | `1111011011`              | 219             | `0011011011`     |
+| 46        | 997                      | `1111100101`              | 229             | `0011100101`     |
+| 47        | 1000                     | `1111101000`              | 232             | `0011101000`     |
+| 48        | 1002                     | `1111101010`              | 234             | `0011101010`     |
+| 49        | 1002                     | `1111101010`              | 234             | `0011101010`     |
+| 50        | 1003                     | `1111101011`              | 235             | `0011101011`     |
+
+Note that Python's output numbers actually looked akin to `0b101` (ln. 20) or `0b11001` (ln. 30). The `0b` indicates that it is a string (a result of it being converted to a string via `str()` for purposes of printing). [@Python-Documentation-Bin] Note, though, that it leaves out the *leading zeroes*, as they are implied and potentially infinite. These were modified on the table for the sake of legibility. This is notable, however, in that *most* of them were given two preceding 0's. The MSP values (specifically lines 21-28, the "lows" in the data) were similarly modified.
+
+From observation, it's apparent that the last 8 bits match-up 1:1 in every case, while the first two bits do not, hence it seems to be a binary issue. 
+
+To fix this issue, it may be tempting to simply add two `1`'s instead of two `0`'s to the Python's integers, however this would be fallacious. The error is that of the two most significant bits being out of place. This is best seen in lines 14 and 21 (this table is unmodified):
+
+| Iteration | MSP Serial Monitor Value | MSP Serial Monitor Binary | RBPi Read Value | RBPi Read Binary |
+| --------- | ------------------------ | ------------------------- | --------------- | ---------------- |
+| 14        | 755                      | `1011110011`              | 243             | `0b11110011`     |
+| 21        | 499                      | `111110011`               | 243             | `0b11110011`     |
+
+Note how the RBPi reads the same value, while the MSP values are significantly different... one *bit* significantly different. Note that $755-499=256$, the value of $2^8$.
+
+To elucidate, the issue is that the value stored by the computer is 10-bits, while the I2C communication expects 8-bits. The two *Most-Significant Bits* (MSB) are being trimmed as a result. In order to fix this, if a temp value is more than 10-bits long, then it must be adjusted such that the MSB's are passed first.
