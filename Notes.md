@@ -1,7 +1,8 @@
--------------  ----------------
+---
+title: Implementation Notes
+date: 2020-12-09
 bibliography:  [references.bib]
--------------  ----------------
-
+---
 # Notes
 
 For general-use notes while I am going through the project.
@@ -80,7 +81,7 @@ I2C Protocol allows multiple masters and slaves to communicate with a rather sim
 
 ## Important Notes
 
-> It is a master-slave protocol, meaning there must be at least one master and at least one slave on the bus. The master always initiates transactions. [@I2C-Basics]
+> It is a master-slave protocol, meaning there must be at least one master and at least one slave on the bus. The master always initiates transactions. [@I2C-Basics-01]
 
 > The clock is always driven by the master, while the data is bidirectional, meaning it can be driven by either the master or the slave. [@I2C-Basics-02]
 
@@ -90,7 +91,7 @@ I2C Protocol allows multiple masters and slaves to communicate with a rather sim
 > 2. **Master receiver slave transmitter** – the master sends the first byte with the R/W bit set (read). All subsequent data bytes are transmitted by the slave to the master.
 > 3. **Combined format** – effectively format 1 + 2 consecutively with no STOP condition in the middle. Instead of the STOP, there is what is called a repeated START condition which is exactly the same as a START but not preceded by a STOP.
 
-![An example of a multi-master multi-slave I2C example. [@LDR-Manual-02]](images/I2C-Example.png)
+![An example of a multi-master multi-slave I2C example. [@LDR-Manual-02]](images/I2C-Example.png){width=200px}
 
 In our example, the master will be the Raspberry Pi while the TI board acts as a slave. Note that this decision is somewhat arbitrary: I consider the RBPi the main host device while the TI board serves nothing more than a glorified ADC. However, even with that in mind, to my understanding nothing declares that the master must be the main processing device, and the master-slave role can thus be interchanged here.
 
@@ -295,7 +296,7 @@ pi@raspberrypi:~ $ i2cdetect -y 1
 70: -- -- -- -- -- -- -- --                         
 ```
 
-If no numbers are shown, that indicate an error in the I2C communication (alternatively, the board is not responding/updating, as such may want to test if the LED can blink or such). There are innumerable problems that can go wrong with I2C, as <i2c-bus.org> explains.[@I2C-CommProb] [@I2C-ObscProb]
+If no numbers are shown, that indicate an error in the I2C communication (alternatively, the board is not responding/updating, as such may want to test if the LED can blink or such). There are innumerable problems that can go wrong with I2C, as <i2c-bus.org> explains.[@I2C-CommProbs] [@I2C-ObscProbs]
 
 ### Python Kernel Problems
 
