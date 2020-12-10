@@ -444,3 +444,53 @@ To fix this issue, it may be tempting to simply add two `1`'s instead of two `0`
 Note how the RBPi reads the same value, while the MSP values are significantly different... one *bit* significantly different. Note that $755-499=256$, the value of $2^8$.
 
 To elucidate, the issue is that the value stored by the computer is 10-bits, while the I2C communication expects 8-bits. The two *Most-Significant Bits* (MSB) are being trimmed as a result. In order to fix this, if a temp value is more than 10-bits long, then it must be adjusted such that the MSB's are passed first.
+
+```cpp
+Wire.write(sensorValue >> 2);
+```
+
+The `>>` indicates a right bit-shift operation [@CPP-BitShift], which simply pushes each byte rightward two spaces. `1011110011` becomes `0010111100`. Note that this process *removes data* from being sent and as such must be used carefully, but in this case it is necessary to make room for the MSB's. [^8BitReductionDecision] 
+
+[^8BitReductionDecision]: Perhaps not *necessary* -- the data could be split-up and sent that way -- but a neat and efficient manner of handling it as the precision of the last two bits is arguably unnecessary.
+
+Comparing the result now shows...
+
+| Iteration | MSP Serial Monitor Value | MSP Serial Monitor Binary | RBPi Read Value | RBPi Read Binary |
+| --------- | ------------------------ | ------------------------- | --------------- | ---------------- |
+| 0         | 964                      | `1111000100`              | 241             | `0b11110001`     |
+| 1         | 961                      | `1111000001`              | 241             | `0b11110001`     |
+| 2         | 962                      | `1111000010`              | 240             | `0b11110000`     |
+| 3         | 962                      | `1111000010`              | 240             | `0b11110000`     |
+| 4         | 964                      | `1111000100`              | 240             | `0b11110000`     |
+| 5         | 965                      | `1111000101`              | 241             | `0b11110001`     |
+| 6         | 964                      | `1111000100`              | 241             | `0b11110001`     |
+| 7         | 964                      | `1111000100`              | 240             | `0b11110000`     |
+| 8         | 961                      | `1111000001`              | 240             | `0b11110000`     |
+| 9         | 962                      | `1111000010`              | 240             | `0b11110000`     |
+
+While it may appear nothing changed, note that the digits read by the RBPi now correspond to the first and Most-Significant Bits of the MSP data, rather than the LSB's. By coincidence, the first 4 digits were all 1's, hence the numbers on the python side seem relatively unphased. The missing element now is the fact that the read data values are still interpreted as an 8-bit character rather than a 10-bit character. As an analogy, given the number `23620`, the RBPi is correctly receiving `236` instead of `620`, but it's outputting `236` as it is not aware that it is supposed to have more digits. [^NotNecessary]
+
+[^NecessityOfSyncing]: Note that the extra values of `00` are not entirely necessary, and the values can be used as-is on the RBPi; indeed in a formal project you likely would so as not to waste processing time. However, as this is a learning project, it helps to see the values as the same on the two separate devices, and shifting is relatively simple, hence this "extra step".
+
+```python
+print(str(i) + ": " + str(sensorValue << 2) + " | " + str(bin(sensorValue)))
+```
+
+| Iteration | MSP Serial Monitor Value | MSP Serial Monitor Binary | RBPi Read Value | RBPi Read Binary |
+| --------- | ------------------------ | ------------------------- | --------------- | ---------------- |
+| 0         | 965                      | `1111000101`              | 964             | `0b1111000100`     |
+| 1         | 962                      | `1111000010`              | 960             | `0b1111000000`     |
+| 2         | 961                      | `1111000001`              | 960             | `0b1111000000`     |
+| 3         | 960                      | `1111000000`              | 960             | `0b1111000000`     |
+| 4         | 960                      | `1111000000`              | 960             | `0b1111000000`     |
+| 5         | 960                      | `1111000000`              | 960             | `0b1111000000`     |
+| 6         | 963                      | `1111000011`              | 960             | `0b1111000000`     |
+| 7         | 964                      | `1111000100`              | 964             | `0b1111000100`     |
+| 8         | 964                      | `1111000100`              | 964             | `0b1111000100`     |
+| 9         | 963                      | `1111000011`              | 960             | `0b1111000000`     |
+
+[^TrailingZeroes]
+
+Python uses the same bit-shift technique as C++. [@Python-BitShift] Note that some precision is lost, and as such comparing the values between the two devices shows a rounding error, specifically by a value of `4` -- as the last two bits will always be `00`, the Least-Significant Bit that can be modified is the third-bit, with a value of `4` in base 10.
+
+[^TrailingZeroes]: For some odd reason, Python's command line would not show the last two digits, though as seen it interprets them correctly. Added the `00`'s to the table for sake of clarity.
