@@ -44,7 +44,7 @@ with SMBus(1) as bus:
         #bus.pec = 1
         #Reads data from the Slaves
         sensorValue = readNumber()
-        print(str(i) + ": " + str(sensorValue) + " | " + str(bin(sensorValue)))
+        print(str(i) + ": " + str(sensorValue << 2) + " | " + str(bin(sensorValue)))
         i+=1
         #print(readNumber())
         time.sleep(.2)
